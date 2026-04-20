@@ -1,0 +1,11 @@
+essentia
+pandas
+matplotlib
+torch
+transformers
+tqdm
+seaborn
+numpy
+requests
+streamlit  
+scikit-learn
