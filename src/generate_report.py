@@ -58,10 +58,10 @@ def process_analysis_results(json_path):
             'tempo': feat.get('tempo'),
             'loudness': feat.get('loudness'),
             'danceability': feat.get('danceability')[0] if isinstance(feat.get('danceability'), list) else feat.get('danceability'),
-            'voice': feat.get('voice_presence')[0] if isinstance(feat.get('voice_presence'), list) else feat.get('voice_presence'),
+            'voice': feat.get('voice_presence')[1] if isinstance(feat.get('voice_presence'), list) else feat.get('voice_presence'),
         }
 
-        # Keys - Logic to extract key string from the nested dict
+        # Keys - Logic to extract key string fromd the nested dict
         for profile in ['temperley', 'krumhansl', 'edma']:
             p_data = feat.get('key_info', {}).get(profile, {})
             row[f'key_{profile}'] = f"{p_data.get('key')} {p_data.get('scale')}"
@@ -71,13 +71,41 @@ def process_analysis_results(json_path):
         style_probs = np.array(feat.get('music_styles', []))
         if len(style_probs) > 0:
             max_idx = np.argmax(style_probs)
-            full_style = tags[max_idx] # e.g., "Electronic---Techno"
+            full_style = tags[max_idx]
             row['primary_style'] = full_style
             row['parent_genre'] = full_style.split('---')[0]
         
         rows.append(row)
     
     return pd.DataFrame(rows), tags, data
+
+def plot_voice_thresholds(df):
+    thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    vocal_pcts = []
+    instrumental_pcts = []
+
+    for t in thresholds:
+        vocal = (df['voice'] > t).mean() * 100
+        vocal_pcts.append(vocal)
+        instrumental_pcts.append(100 - vocal)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(thresholds, vocal_pcts, marker='o', label='Vocal')
+    ax.plot(thresholds, instrumental_pcts, marker='o', label='Instrumental')
+    ax.axvline(0.5, color='red', linestyle='--', alpha=0.5, label='Default threshold (0.5)')
+    ax.set_xlabel("Threshold")
+    ax.set_ylabel("% of tracks")
+    ax.set_title("Vocal vs Instrumental ratio across thresholds")
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig('voice_threshold_analysis.png')
+    plt.show()
+
+    # Print a summary table
+    print("\nVoice threshold analysis:")
+    print(f"{'Threshold':>10} {'Vocal %':>10} {'Instrumental %':>16}")
+    for t, v, i in zip(thresholds, vocal_pcts, instrumental_pcts):
+        print(f"{t:>10.1f} {v:>10.1f} {i:>16.1f}")
 
 # --- 3. Visualization and Reporting ---
 def generate_report(json_path):
@@ -106,16 +134,35 @@ def generate_report(json_path):
     axes[1,1].axvline(-14, color='red', linestyle='--', label='Streaming Std (-14 LUFS)')
     axes[1,1].legend()
 
-    # Q4: Key Profile Agreement (Temperley used for the plot)
+# --- Q4: Key Profile Distribution (Comparison of 3 Profiles) ---
+    # 1. Prepare the data
+    key_cols = ['key_temperley', 'key_krumhansl', 'key_edma']
+    
+    # "Melt" the dataframe so we have a column for 'Profile' and a column for 'Key'
+    df_keys = df.melt(value_vars=key_cols, var_name='Profile', value_name='Detected Key')
+    
+    # 2. Clean up profile names for the legend
+    df_keys['Profile'] = df_keys['Profile'].str.replace('key_', '').str.capitalize()
+
+    # 3. Define the standard order for the X-axis
     key_order = ["C major", "C# major", "D major", "D# major", "E major", "F major", 
                  "F# major", "G major", "G# major", "A major", "A# major", "B major",
                  "C minor", "C# minor", "D minor", "D# minor", "E minor", "F minor", 
                  "F# minor", "G minor", "G# minor", "A minor", "A# minor", "B minor"]
+
+    # 4. Plot
+    sns.countplot(
+        data=df_keys, 
+        x='Detected Key', 
+        hue='Profile', 
+        ax=axes[2,0], 
+        order=key_order,
+        palette="muted"
+    )
     
-    # Filter only keys in our expected list for a cleaner plot
-    top_keys = df['key_temperley'].value_counts().reindex(key_order).fillna(0)
-    top_keys.plot(kind='bar', ax=axes[2,0], color='darkblue')
-    axes[2,0].set_title("Tonality Distribution (Temperley Profile)")
+    axes[2,0].set_title("Tonality Distribution: Profile Comparison")
+    axes[2,0].tick_params(axis='x', rotation=90) # Rotate labels so they don't overlap
+    axes[2,0].legend(title="Algorithm")
 
     # Q5: Vocal vs Instrumental
     df['vocal_label'] = df['voice'].apply(lambda x: 'Vocal' if x > 0.5 else 'Instrumental')
@@ -145,6 +192,8 @@ def generate_report(json_path):
     pd.DataFrame(style_results).to_csv('style_distribution_full.tsv', sep='\t', index=False)
     print("Full styles result exported to 'style_distribution_full.tsv'")
     plt.show()
+
+    plot_voice_thresholds(df)
 
 if __name__ == "__main__":
     generate_report('analysis_results.json')

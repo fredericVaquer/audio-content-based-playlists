@@ -80,10 +80,6 @@ def parse_folder(folder_path, output_file='analysis_results.json'):
     clap_model = ClapModel.from_pretrained(clap_model_id).to(device)
     clap_processor = AutoProcessor.from_pretrained(clap_model_id)
 
-    # Resamplers
-    resample_16k = es.Resample(outputSampleRate=16000)
-    resample_48k = es.Resample(outputSampleRate=48000)
-
     extraction_registry = {
         'tempo': (extract_tempo, es.RhythmExtractor2013()),
         'key': (extract_keys, {
@@ -123,15 +119,13 @@ def parse_folder(folder_path, output_file='analysis_results.json'):
             track_data = {}
             
             # Pre-resample once per track
-            resample_16k.configure(inputSampleRate=sr)
-            resample_48k.configure(inputSampleRate=sr)
-            audio_16k = resample_16k(mono_audio)
-            audio_48k = resample_48k(mono_audio)
+            audio_16k = es.Resample(inputSampleRate=sr, outputSampleRate=16000)(mono_audio)
+            audio_48k = es.Resample(inputSampleRate=sr, outputSampleRate=48000)(mono_audio)
 
             # Execution Logic
             # Note: Effnet must run before classifiers
             mean_effnet, full_effnet = extraction_registry['effnet'][0](audio_16k, extraction_registry['effnet'][1])
-            
+
             track_data['tempo'] = extraction_registry['tempo'][0](mono_audio, extraction_registry['tempo'][1])
             track_data['key_info'] = extraction_registry['key'][0](mono_audio, extraction_registry['key'][1])
             track_data['loudness'] = extraction_registry['loudness'][0](audio, extraction_registry['loudness'][1])
@@ -141,7 +135,6 @@ def parse_folder(folder_path, output_file='analysis_results.json'):
             track_data['music_styles'] = extraction_registry['music_styles'][0](full_effnet, extraction_registry['music_styles'][1])
             track_data['voice_presence'] = extraction_registry['voice_presence'][0](full_effnet, extraction_registry['voice_presence'][1])
             track_data['danceability'] = extraction_registry['danceability'][0](full_effnet, extraction_registry['danceability'][1])
-            
             # CLAP
             track_data['clap_indices'] = extraction_registry['TA_embeddings'][0](audio_48k, extraction_registry['TA_embeddings'][1])
 

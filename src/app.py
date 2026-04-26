@@ -33,7 +33,7 @@ def load_analysis_data(json_path):
             'tempo': feat.get('tempo'),
             'loudness': feat.get('loudness'),
             'danceability': feat.get('danceability')[0] if isinstance(feat.get('danceability'), list) else feat.get('danceability'),
-            'voice': feat.get('voice_presence')[0] if isinstance(feat.get('voice_presence'), list) else feat.get('voice_presence'),
+            'voice': feat.get('voice_presence')[1] if isinstance(feat.get('voice_presence'), list) else feat.get('voice_presence'),
             # Using Temperley as requested
             'key': feat.get('key_info', {}).get('temperley', {}).get('key', 'Unknown'),
             'scale': feat.get('key_info', {}).get('temperley', {}).get('scale', 'Unknown'),
